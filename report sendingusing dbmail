@@ -1,5 +1,5 @@
-create stored proc
-USE [StackOverflow2010]  ;
+-- create stored proc
+ USE  [StackOverflow2010];
 GO
 
 CREATE PROCEDURE SendReportResults
@@ -9,6 +9,7 @@ BEGIN
     DECLARE @subject NVARCHAR(100);
     DECLARE @recipients NVARCHAR(MAX);
     DECLARE @body NVARCHAR(MAX);
+    DECLARE @result NVARCHAR(MAX);
 
     SET @query = '
         SELECT top 100 Id, DisplayName, Location, Reputation 
@@ -16,33 +17,39 @@ BEGIN
     ';
 
     SET @subject = 'Daily Report';
-    SET @recipients = 'abc@yahoo.com;cde@gmail.com';
-    SET @body = 'Please find the daily report attached';
+    SET @recipients = 'recipient1@example.com;recipient2@example.com';
+    SET @body = 'Please find the daily report attached.';
 
-    DECLARE @result NVARCHAR(MAX);
-    
     -- Use FOR XML PATH to format the query result as HTML
-    SET @result = 
-    ( 
+    SET @result = (
         SELECT top 100 Id, DisplayName, Location, Reputation 
                 FROM Users
-        FOR XML PATH('tr'), ELEMENTS 
-    );
-	 
-    -- Create the HTML table structure
+        FOR XML PATH('tr'), TYPE
+    ).value('.', 'NVARCHAR(MAX)');
+
+    -- Add HTML table structure
     SET @result = '<table border="1"><tr><th>Column1</th><th>Column2</th><th>Column3</th></tr>' + @result + '</table>';
+
+    -- Ensure the total body length does not exceed NVARCHAR(MAX)
+    IF LEN(@body + @result) <= 4000
+    BEGIN
+        SET @body = @body + @result;
+    END
+    ELSE
+    BEGIN
+        SET @body = @body + LEFT(@result, 4000 - LEN(@body));
+    END
 
     -- Send email with the query results as HTML
     EXEC msdb.dbo.sp_send_dbmail
         @profile_name = 'DBMail',
         @recipients = @recipients,
         @subject = @subject,
-        @body = @body + @result,
+        @body = @body,
         @body_format = 'HTML';
 END;
 GO
 
---create job
 
 USE msdb;
 GO
